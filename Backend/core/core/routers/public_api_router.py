@@ -3,6 +3,7 @@ from product.views import ProductViewSet, ProductVariantViewSet
 from notification.views import NotificationViewSet, AdminNotificationViewSet
 from user.views import ProfileAPIView, ChangePasswordAPIView
 from django.urls import path, include
+
 router = DefaultRouter()
 
 

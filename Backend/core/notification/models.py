@@ -70,6 +70,8 @@ class NotificationModel(models.Model):
     expires_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
+        verbose_name = "Notification"
+        verbose_name_plural = "Notifications"
         db_table = "notifications"
         ordering = ["-created_at"]
         indexes = [

@@ -1,88 +1,66 @@
-from django.utils import timezone
 from django.db.models import Q
-from rest_framework import viewsets, permissions, status, serializers
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from notification.serializers import NotificationBulkDeleteResponseSerializer, NotificationBulkUpdateResponseSerializer
+from django.utils import timezone
+
 from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiParameter,
+    OpenApiResponse,
+    OpenApiTypes,
     extend_schema,
     extend_schema_view,
-    OpenApiParameter,
-    OpenApiExample,
-    OpenApiResponse,
-    inline_serializer,
-    OpenApiTypes,
 )
 
+from rest_framework import mixins, permissions, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+
 from .models import NotificationModel
+from .permissions import IsNotificationOwner
 from .serializers import (
-    NotificationSerializer,
+    NotificationBulkDeleteResponseSerializer,
+    NotificationBulkUpdateResponseSerializer,
     NotificationMarkReadSerializer,
+    NotificationSerializer,
     NotificationStatsSerializer,
 )
 from .services import mark_all_as_read
-from .permissions import IsNotificationOwner
 
 
 @extend_schema_view(
     list=extend_schema(
         summary="List my notifications",
         description=(
-            "Returns authenticated user's notifications. "
-            "Supports filtering by read status, notification type, priority, "
-            "and expired notifications."
+            "Returns authenticated user's notifications. Supports filtering by "
+            "read status, notification type, priority, and expired notifications."
         ),
         parameters=[
             OpenApiParameter(
                 name="is_read",
-                type=bool,
+                type=OpenApiTypes.BOOL,
                 location=OpenApiParameter.QUERY,
                 required=False,
-                description="Filter notifications by read status. Use true or false.",
-                examples=[
-                    OpenApiExample(
-                        "Unread notifications",
-                        value=False,
-                    ),
-                    OpenApiExample(
-                        "Read notifications",
-                        value=True,
-                    ),
-                ],
+                description="Filter notifications by read status.",
             ),
             OpenApiParameter(
                 name="type",
-                type=str,
+                type=OpenApiTypes.STR,
                 location=OpenApiParameter.QUERY,
                 required=False,
                 description="Filter notifications by notification type.",
             ),
             OpenApiParameter(
                 name="priority",
-                type=str,
+                type=OpenApiTypes.STR,
                 location=OpenApiParameter.QUERY,
                 required=False,
                 description="Filter notifications by priority.",
             ),
             OpenApiParameter(
                 name="include_expired",
-                type=bool,
+                type=OpenApiTypes.BOOL,
                 location=OpenApiParameter.QUERY,
                 required=False,
-                description=(
-                    "If true, expired notifications are included. "
-                    "Default is false."
-                ),
-                examples=[
-                    OpenApiExample(
-                        "Include expired notifications",
-                        value=True,
-                    ),
-                    OpenApiExample(
-                        "Exclude expired notifications",
-                        value=False,
-                    ),
-                ],
+                description="If true, expired notifications are included. Default is false.",
             ),
         ],
         responses={
@@ -102,20 +80,6 @@ from .permissions import IsNotificationOwner
         },
         tags=["Notifications"],
     ),
-    create=extend_schema(
-        summary="Create notification",
-        description=(
-            "Creates a notification for the authenticated user. "
-            "This endpoint is intended for development only and should be disabled in production."
-        ),
-        request=NotificationSerializer,
-        responses={
-            201: NotificationSerializer,
-            400: OpenApiResponse(description="Invalid notification data."),
-            401: OpenApiResponse(description="Authentication credentials were not provided."),
-        },
-        tags=["Notifications"],
-    ),
     destroy=extend_schema(
         summary="Delete notification",
         description="Deletes one notification owned by the authenticated user.",
@@ -128,17 +92,20 @@ from .permissions import IsNotificationOwner
         tags=["Notifications"],
     ),
 )
-class NotificationViewSet(viewsets.ModelViewSet):
+class NotificationViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
     serializer_class = NotificationSerializer
     permission_classes = [permissions.IsAuthenticated, IsNotificationOwner]
-
-    # POST METHOD SHOULD BE DELETED FOR PRODUCTION
-    http_method_names = ["get", "post", "delete", "head", "options"]
+    http_method_names = ["get", "delete", "post", "head", "options"]
 
     def get_queryset(self):
-        user = self.request.user
-
-        queryset = NotificationModel.objects.filter(recipient=user)
+        queryset = NotificationModel.objects.filter(
+            recipient=self.request.user,
+        )
 
         is_read = self.request.query_params.get("is_read")
         notification_type = self.request.query_params.get("type")
@@ -161,17 +128,6 @@ class NotificationViewSet(viewsets.ModelViewSet):
             )
 
         return queryset.order_by("-created_at")
-
-    def perform_create(self, serializer):
-        """
-        Optional behavior:
-        If you keep POST enabled, this lets authenticated users create
-        notifications for themselves.
-
-        For stricter production usage, you may remove POST from
-        http_method_names and only create notifications through services.py.
-        """
-        serializer.save(recipient=self.request.user)
 
     @extend_schema(
         summary="Mark notification as read",
@@ -304,7 +260,8 @@ class NotificationViewSet(viewsets.ModelViewSet):
     )
     @action(detail=False, methods=["post"], url_path="mark-selected-read")
     def mark_selected_read(self, request):
-        serializer = NotificationMarkReadSerializer(data=request.data)
+        serializer = NotificationMarkReadSerializer(
+            data=request.data, context={"request": request},)
         serializer.is_valid(raise_exception=True)
 
         notification_ids = serializer.validated_data.get(
@@ -438,7 +395,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
 @extend_schema_view(
     list=extend_schema(
         tags=["Admin Notifications"],
-        summary="List all notifications",
+        summary="List notifications",
         description="Admin-only endpoint for listing all user notifications.",
         parameters=[
             OpenApiParameter(
@@ -469,42 +426,98 @@ class NotificationViewSet(viewsets.ModelViewSet):
                 required=False,
                 description="Filter by notification type.",
             ),
+            OpenApiParameter(
+                name="priority",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Filter by priority.",
+            ),
         ],
+        responses={200: NotificationSerializer(many=True)},
+    ),
+    create=extend_schema(
+        tags=["Admin Notifications"],
+        summary="Create notification",
+        description="Admin-only endpoint for creating a notification for a user.",
+        request=NotificationSerializer,
+        responses={
+            201: NotificationSerializer,
+            400: OpenApiResponse(description="Invalid notification data."),
+        },
     ),
     retrieve=extend_schema(
         tags=["Admin Notifications"],
-        summary="Retrieve any notification",
+        summary="Retrieve notification",
         description="Admin-only endpoint for retrieving a notification by ID.",
+        responses={
+            200: NotificationSerializer,
+            404: OpenApiResponse(description="Notification not found."),
+        },
+    ),
+    update=extend_schema(
+        tags=["Admin Notifications"],
+        summary="Update notification",
+        description="Admin-only endpoint for fully updating a notification.",
+        request=NotificationSerializer,
+        responses={
+            200: NotificationSerializer,
+            400: OpenApiResponse(description="Invalid notification data."),
+            404: OpenApiResponse(description="Notification not found."),
+        },
+    ),
+    partial_update=extend_schema(
+        tags=["Admin Notifications"],
+        summary="Partially update notification",
+        description="Admin-only endpoint for partially updating a notification.",
+        request=NotificationSerializer,
+        responses={
+            200: NotificationSerializer,
+            400: OpenApiResponse(description="Invalid notification data."),
+            404: OpenApiResponse(description="Notification not found."),
+        },
+    ),
+    destroy=extend_schema(
+        tags=["Admin Notifications"],
+        summary="Delete notification",
+        description="Admin-only endpoint for deleting any notification.",
+        responses={
+            204: None,
+            404: OpenApiResponse(description="Notification not found."),
+        },
     ),
 )
-class AdminNotificationViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    Admin-only endpoint for viewing all notifications.
-    """
+class AdminNotificationViewSet(viewsets.ModelViewSet):
     serializer_class = NotificationSerializer
     permission_classes = [permissions.IsAdminUser]
-    http_method_names = ["get", "head", "options"]
+    http_method_names = ["get", "post", "put",
+                         "patch", "delete", "head", "options"]
 
     def get_queryset(self):
         queryset = NotificationModel.objects.select_related("recipient").all()
 
-        include_expired = self.request.query_params.get("include_expired")
+        include_expired = self.request.query_params.get(
+            "include_expired", "false")
+        recipient_id = self.request.query_params.get("recipient")
+        is_read = self.request.query_params.get("is_read")
+        notification_type = self.request.query_params.get("type")
+        priority = self.request.query_params.get("priority")
 
         if include_expired != "true":
             queryset = queryset.filter(
                 Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
             )
 
-        recipient_id = self.request.query_params.get("recipient")
         if recipient_id:
             queryset = queryset.filter(recipient_id=recipient_id)
 
-        is_read = self.request.query_params.get("is_read")
         if is_read in ["true", "false"]:
             queryset = queryset.filter(is_read=is_read == "true")
 
-        notification_type = self.request.query_params.get("type")
         if notification_type:
             queryset = queryset.filter(notification_type=notification_type)
+
+        if priority:
+            queryset = queryset.filter(priority=priority)
 
         return queryset.order_by("-created_at")
