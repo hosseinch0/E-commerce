@@ -11,6 +11,7 @@ from drf_spectacular.utils import (
     OpenApiExample,
     OpenApiResponse,
     inline_serializer,
+    OpenApiTypes,
 )
 
 from .models import NotificationModel
@@ -432,3 +433,78 @@ class NotificationViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_200_OK,
         )
+
+
+@extend_schema_view(
+    list=extend_schema(
+        tags=["Admin Notifications"],
+        summary="List all notifications",
+        description="Admin-only endpoint for listing all user notifications.",
+        parameters=[
+            OpenApiParameter(
+                name="include_expired",
+                type=OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Include expired notifications.",
+            ),
+            OpenApiParameter(
+                name="recipient",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Filter notifications by recipient user UUID.",
+            ),
+            OpenApiParameter(
+                name="is_read",
+                type=OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Filter by read status.",
+            ),
+            OpenApiParameter(
+                name="type",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Filter by notification type.",
+            ),
+        ],
+    ),
+    retrieve=extend_schema(
+        tags=["Admin Notifications"],
+        summary="Retrieve any notification",
+        description="Admin-only endpoint for retrieving a notification by ID.",
+    ),
+)
+class AdminNotificationViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Admin-only endpoint for viewing all notifications.
+    """
+    serializer_class = NotificationSerializer
+    permission_classes = [permissions.IsAdminUser]
+    http_method_names = ["get", "head", "options"]
+
+    def get_queryset(self):
+        queryset = NotificationModel.objects.select_related("recipient").all()
+
+        include_expired = self.request.query_params.get("include_expired")
+
+        if include_expired != "true":
+            queryset = queryset.filter(
+                Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+            )
+
+        recipient_id = self.request.query_params.get("recipient")
+        if recipient_id:
+            queryset = queryset.filter(recipient_id=recipient_id)
+
+        is_read = self.request.query_params.get("is_read")
+        if is_read in ["true", "false"]:
+            queryset = queryset.filter(is_read=is_read == "true")
+
+        notification_type = self.request.query_params.get("type")
+        if notification_type:
+            queryset = queryset.filter(notification_type=notification_type)
+
+        return queryset.order_by("-created_at")

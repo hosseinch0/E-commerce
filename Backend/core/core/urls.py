@@ -19,15 +19,16 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from product.views import ProductViewSet, ProductVariantViewSet
 from rest_framework_simplejwt.views import TokenRefreshView
-from .api_router import router
+from .routers.public_api_router import router
+from .routers.private_api_router import admin_router
 from user.views import (
-    UserViewSet,
-    PhoneOTPViewSet,
     SendOTPAPIView,
     VerifyOTPAPIView,
     PasswordResetRequestAPIView,
     PasswordResetConfirmAPIView,
     LogoutAPIView,
+    ChangePasswordAPIView,
+    ProfileAPIView,
 )
 from drf_spectacular.views import (
     SpectacularAPIView,
@@ -39,8 +40,16 @@ from drf_spectacular.views import (
 urlpatterns = [
     path("admin/", admin.site.urls),
 
-    # Main API router root
+    # Main public API router root
     path("api/", include(router.urls)),
+
+    # Main Private/Admin router root
+    path("api/admin/", include(admin_router.urls)),
+
+
+    # Users public urls
+    path("api/profile/", include('user.urls')),
+
 
     # Auth URLs
     path("api/auth/token/refresh/",

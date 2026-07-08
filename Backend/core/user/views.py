@@ -7,15 +7,17 @@ from drf_spectacular.utils import (
     extend_schema_view,
 )
 from rest_framework import permissions, status, viewsets
-from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from user.services.otp import issue_and_send_otp
 from user.services.auth import get_tokens_for_user
+from user.services.otp import issue_and_send_otp
+from rest_framework.generics import RetrieveUpdateAPIView
 
 from .models import PhoneOTPModel
 from .serializers import (
     ChangePasswordSerializer,
+    DetailResponseSerializer,
+    LogoutSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     PhoneOTPSerializer,
@@ -25,7 +27,7 @@ from .serializers import (
     UserUpdateSerializer,
     VerifyOTPSerializer,
 )
-from .serializers import LogoutSerializer, DetailResponseSerializer
+
 User = get_user_model()
 
 
@@ -42,9 +44,7 @@ class LogoutAPIView(APIView):
                 examples=[
                     OpenApiExample(
                         name="Success response",
-                        value={
-                            "detail": "Logged out successfully."
-                        },
+                        value={"detail": "Logged out successfully."},
                     )
                 ],
             ),
@@ -53,11 +53,7 @@ class LogoutAPIView(APIView):
                 examples=[
                     OpenApiExample(
                         name="Invalid token",
-                        value={
-                            "refresh": [
-                                "This field is required."
-                            ]
-                        },
+                        value={"refresh": ["This field is required."]},
                     )
                 ],
             ),
@@ -67,8 +63,7 @@ class LogoutAPIView(APIView):
                     OpenApiExample(
                         name="Unauthorized",
                         value={
-                            "detail": "Authentication credentials were not provided."
-                        },
+                            "detail": "Authentication credentials were not provided."},
                     )
                 ],
             ),
@@ -83,92 +78,60 @@ class LogoutAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        return Response({"detail": "Logged out successfully."}, status=status.HTTP_200_OK)
+        return Response(
+            {"detail": "Logged out successfully."},
+            status=status.HTTP_200_OK,
+        )
 
 
 @extend_schema_view(
-    list=extend_schema(
-        summary="List users",
-        description="Returns all users ordered by newest registration first.",
-        responses=UserSerializer,
-        tags=["Users"],
-    ),
-    retrieve=extend_schema(
-        summary="Retrieve user",
-        description="Returns a single user by ID.",
-        responses=UserSerializer,
-        tags=["Users"],
-    ),
-    create=extend_schema(
-        summary="Create user",
-        description="Creates a new user account using a phone number.",
-        request=UserCreateSerializer,
-        responses={201: UserSerializer},
-        tags=["Users"],
-    ),
-    update=extend_schema(
-        summary="Update user",
-        description="Updates all editable user fields.",
-        request=UserUpdateSerializer,
-        responses=UserSerializer,
-        tags=["Users"],
-    ),
-    partial_update=extend_schema(
-        summary="Partially update user",
-        description="Partially updates editable user fields.",
-        request=UserUpdateSerializer,
-        responses=UserSerializer,
-        tags=["Users"],
-    ),
-    destroy=extend_schema(
-        summary="Delete user",
-        description="Deletes a user account.",
-        responses={204: None},
-        tags=["Users"],
-    ),
-)
-class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all().order_by("-date_joined")
-
-    def get_permissions(self):
-        if self.action == "create":
-            return [permissions.AllowAny()]
-
-        if self.action in ["me", "change_password"]:
-            return [permissions.IsAuthenticated()]
-
-        return [permissions.IsAdminUser()]
-
-    def get_serializer_class(self):
-        if self.action == "create":
-            return UserCreateSerializer
-
-        if self.action in ["update", "partial_update", "me"]:
-            return UserUpdateSerializer
-
-        return UserSerializer
-
-    @extend_schema(
-        methods=["GET"],
+    get=extend_schema(
         summary="Get my profile",
         description="Returns the authenticated user's profile.",
         responses={
             200: UserSerializer,
-            401: OpenApiResponse(description="Authentication credentials were not provided."),
+            401: OpenApiResponse(
+                description="Authentication credentials were not provided."
+            ),
         },
-        tags=["Users"],
-    )
-    @extend_schema(
-        methods=["PATCH"],
+        tags=["Profile"],
+    ),
+    put=extend_schema(
         summary="Update my profile",
+        description="Fully updates the authenticated user's profile.",
+        request=UserUpdateSerializer,
+        responses={
+            200: UserSerializer,
+            400: OpenApiResponse(description="Invalid user data."),
+            401: OpenApiResponse(
+                description="Authentication credentials were not provided."
+            ),
+        },
+        tags=["Profile"],
+        examples=[
+            OpenApiExample(
+                name="Put request example",
+                value={
+                    "first_name": "Ali",
+                    "last_name": "Ahmadi",
+                    "email": "ali@example.com",
+                },
+                request_only=True,
+            ),
+        ],
+    ),
+    patch=extend_schema(
+        summary="Partially update my profile",
         description="Partially updates the authenticated user's profile.",
         request=UserUpdateSerializer,
         responses={
             200: UserSerializer,
             400: OpenApiResponse(description="Invalid user data."),
-            401: OpenApiResponse(description="Authentication credentials were not provided."),
+            401: OpenApiResponse(
+                description="Authentication credentials were not provided."
+            ),
         },
-        tags=["Users"],
+        tags=["Profile"],
         examples=[
             OpenApiExample(
                 name="Patch request example",
@@ -179,81 +142,87 @@ class UserViewSet(viewsets.ModelViewSet):
                 request_only=True,
             ),
         ],
-    )
-    @action(
-        detail=False,
-        methods=["get", "patch"],
-        permission_classes=[permissions.IsAuthenticated],
-    )
-    def me(self, request):
-        user = request.user
+    ),
+)
+class ProfileAPIView(RetrieveUpdateAPIView):
+    permission_classes = [permissions.IsAuthenticated]
 
-        if request.method == "GET":
-            serializer = UserSerializer(user)
-            return Response(serializer.data)
+    def get_object(self):
+        return self.request.user
 
-        serializer = UserUpdateSerializer(
-            user,
-            data=request.data,
-            partial=True,
-        )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
+    def get_serializer_class(self):
+        if self.request.method in ["PUT", "PATCH"]:
+            return UserUpdateSerializer
 
-        return Response(UserSerializer(user).data)
+        return UserSerializer
 
-    @extend_schema(
-        summary="Change my password",
-        description="Changes the authenticated user's password.",
-        request=ChangePasswordSerializer,
-        responses={
-            200: DetailResponseSerializer,
-            400: OpenApiResponse(description="Invalid password data."),
-            401: OpenApiResponse(description="Authentication credentials were not provided."),
-        },
-        tags=["Users"],
-        examples=[
-            OpenApiExample(
-                name="Request example",
-                value={
-                    "old_password": "OldPassword123!",
-                    "new_password": "NewPassword123!",
-                    "new_password_confirm": "NewPassword123!",
-                },
-                request_only=True,
-            ),
-            OpenApiExample(
-                name="Success response",
-                value={
-                    "detail": "Password changed successfully."
-                },
-                response_only=True,
-            ),
-        ],
-    )
-    @action(
-        detail=False,
-        methods=["post"],
-        permission_classes=[permissions.IsAuthenticated],
-    )
-    def change_password(self, request):
-        serializer = ChangePasswordSerializer(
-            data=request.data,
-            context={"request": request},
-        )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
+    def update(self, request, *args, **kwargs):
+        response = super().update(request, *args, **kwargs)
+        return Response(UserSerializer(self.get_object()).data)
 
-        return Response(
-            {"detail": "Password changed successfully."},
-            status=status.HTTP_200_OK,
-        )
+    def partial_update(self, request, *args, **kwargs):
+        response = super().partial_update(request, *args, **kwargs)
+        return Response(UserSerializer(self.get_object()).data)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List users",
+        description="Admin-only endpoint. Returns all users ordered by newest registration first.",
+        responses=UserSerializer,
+        tags=["Admin Users"],
+    ),
+    retrieve=extend_schema(
+        summary="Retrieve user",
+        description="Admin-only endpoint. Returns a single user by ID.",
+        responses=UserSerializer,
+        tags=["Admin Users"],
+    ),
+    create=extend_schema(
+        summary="Create user",
+        description="Admin-only endpoint. Creates a new user account using a phone number.",
+        request=UserCreateSerializer,
+        responses={201: UserSerializer},
+        tags=["Admin Users"],
+    ),
+    update=extend_schema(
+        summary="Update user",
+        description="Admin-only endpoint. Updates all editable user fields.",
+        request=UserUpdateSerializer,
+        responses=UserSerializer,
+        tags=["Admin Users"],
+    ),
+    partial_update=extend_schema(
+        summary="Partially update user",
+        description="Admin-only endpoint. Partially updates editable user fields.",
+        request=UserUpdateSerializer,
+        responses=UserSerializer,
+        tags=["Admin Users"],
+    ),
+    destroy=extend_schema(
+        summary="Delete user",
+        description="Admin-only endpoint. Deletes a user account.",
+        responses={204: None},
+        tags=["Admin Users"],
+    ),
+)
+class AdminUserViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all().order_by("-date_joined")
+    permission_classes = [permissions.IsAdminUser]
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return UserCreateSerializer
+
+        if self.action in ["update", "partial_update"]:
+            return UserUpdateSerializer
+
+        return UserSerializer
 
 
 class SendOTPAPIView(APIView):
     permission_classes = [permissions.AllowAny]
 
-    # API DOCUMENTATION PART
     @extend_schema(
         summary="Send OTP code",
         description="Sends a one-time password code to a phone number for login, signup, or password reset.",
@@ -272,7 +241,6 @@ class SendOTPAPIView(APIView):
         },
         tags=["OTP"],
     )
-    # VIEW FUNCTIONALITY
     def post(self, request):
         serializer = SendOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -315,14 +283,12 @@ class SendOTPAPIView(APIView):
 class VerifyOTPAPIView(APIView):
     permission_classes = [permissions.AllowAny]
 
-    # API DOCUMENTATION PART
     @extend_schema(
         summary="Verify OTP code",
         description="Verifies an OTP code. For signup, creates the user if the phone number is not already registered.",
         request=VerifyOTPSerializer,
         responses={
             200: OpenApiResponse(
-                response=UserSerializer,
                 description="OTP verified successfully.",
                 examples=[
                     OpenApiExample(
@@ -337,10 +303,10 @@ class VerifyOTPAPIView(APIView):
                                 "first_name": "",
                                 "last_name": "",
                                 "email": "",
-                                "is_active": "true",
-                                "is_staff": "true",
+                                "is_active": True,
+                                "is_staff": True,
                                 "date_joined": "2026-07-07T18:48:10.045879Z",
-                                "last_login": "2026-07-08T10:52:00.632008Z"
+                                "last_login": "2026-07-08T10:52:00.632008Z",
                             },
                         },
                     )
@@ -585,8 +551,36 @@ class PasswordResetConfirmAPIView(APIView):
         tags=["Admin OTP"],
     ),
 )
-class PhoneOTPViewSet(viewsets.ReadOnlyModelViewSet):
+class PhoneOTPAdminViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = PhoneOTPModel.objects.select_related(
         "user").order_by("-created_at")
     serializer_class = PhoneOTPSerializer
     permission_classes = [permissions.IsAdminUser]
+
+
+class ChangePasswordAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(
+        summary="Change my password",
+        description="Changes the authenticated user's password.",
+        request=ChangePasswordSerializer,
+        responses={
+            200: DetailResponseSerializer,
+            400: OpenApiResponse(description="Invalid password data."),
+            401: OpenApiResponse(description="Authentication credentials were not provided."),
+        },
+        tags=["Profile"],
+    )
+    def post(self, request):
+        serializer = ChangePasswordSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response(
+            {"detail": "Password changed successfully."},
+            status=status.HTTP_200_OK,
+        )
