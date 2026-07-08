@@ -18,8 +18,17 @@ class LogoutSerializer(serializers.Serializer):
         return attrs
 
     def save(self, **kwargs):
+        request = self.context["request"]
+
         try:
             token = RefreshToken(self.refresh)
+
+            user_id = str(token["user_id"])
+            if user_id != str(request.user.id):
+                raise serializers.ValidationError(
+                    {"refresh": "This token does not belong to the authenticated user."}
+                )
+
             token.blacklist()
         except TokenError:
             raise serializers.ValidationError(

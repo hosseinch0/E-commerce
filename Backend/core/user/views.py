@@ -142,14 +142,14 @@ class LogoutAPIView(APIView):
         tags=["Authentication"],
     )
     def post(self, request):
-        serializer = LogoutSerializer(data=request.data)
+        serializer = LogoutSerializer(
+            data=request.data,
+            context={"request": request},
+        )
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        return Response(
-            {"detail": "Logged out successfully."},
-            status=status.HTTP_200_OK,
-        )
+        return Response({"detail": "Logged out successfully."}, status=status.HTTP_200_OK)
 
 
 class UserViewSet(viewsets.ModelViewSet):
