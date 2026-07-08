@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from product.views import ProductViewSet, ProductVariantViewSet
+from rest_framework_simplejwt.views import TokenRefreshView
 from user.views import (
     UserViewSet,
     PhoneOTPViewSet,
@@ -25,6 +26,7 @@ from user.views import (
     VerifyOTPAPIView,
     PasswordResetRequestAPIView,
     PasswordResetConfirmAPIView,
+    LogoutAPIView,
 )
 from drf_spectacular.views import (
     SpectacularAPIView,
@@ -47,7 +49,7 @@ router.register(r"product-variants", ProductVariantViewSet,
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-
+    path("auth/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     # Router URLs
     path("api/", include(router.urls)),
 
@@ -55,6 +57,7 @@ urlpatterns = [
     # OTP Auth URLs
     path("api/auth/send-otp/", SendOTPAPIView.as_view(), name="send-otp"),
     path("api/auth/verify-otp/", VerifyOTPAPIView.as_view(), name="verify-otp"),
+    path("auth/logout/", LogoutAPIView.as_view(), name="logout"),
 
     # DRF browsable API login/logout
     path("api-auth/", include("rest_framework.urls")),

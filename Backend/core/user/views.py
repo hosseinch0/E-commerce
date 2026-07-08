@@ -11,6 +11,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from user.services.otp import issue_and_send_otp
+from user.services.auth import get_tokens_for_user
 
 from .models import PhoneOTPModel
 from .serializers import (
@@ -24,7 +25,7 @@ from .serializers import (
     UserUpdateSerializer,
     VerifyOTPSerializer,
 )
-
+from .serializers import LogoutSerializer
 
 User = get_user_model()
 
@@ -94,6 +95,63 @@ User = get_user_model()
         tags=["Users"],
     ),
 )
+class LogoutAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(
+        summary="Logout user",
+        description="Logs out the authenticated user. Usually used to blacklist or invalidate the refresh token.",
+        request=LogoutSerializer,
+        responses={
+            200: OpenApiResponse(
+                description="Logged out successfully.",
+                examples=[
+                    OpenApiExample(
+                        name="Success response",
+                        value={
+                            "detail": "Logged out successfully."
+                        },
+                    )
+                ],
+            ),
+            400: OpenApiResponse(
+                description="Invalid logout request.",
+                examples=[
+                    OpenApiExample(
+                        name="Invalid token",
+                        value={
+                            "refresh": [
+                                "This field is required."
+                            ]
+                        },
+                    )
+                ],
+            ),
+            401: OpenApiResponse(
+                description="Authentication credentials were not provided or are invalid.",
+                examples=[
+                    OpenApiExample(
+                        name="Unauthorized",
+                        value={
+                            "detail": "Authentication credentials were not provided."
+                        },
+                    )
+                ],
+            ),
+        },
+        tags=["Authentication"],
+    )
+    def post(self, request):
+        serializer = LogoutSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response(
+            {"detail": "Logged out successfully."},
+            status=status.HTTP_200_OK,
+        )
+
+
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by("-date_joined")
 
@@ -159,6 +217,7 @@ class UserViewSet(viewsets.ModelViewSet):
 class SendOTPAPIView(APIView):
     permission_classes = [permissions.AllowAny]
 
+    # API DOCUMENTATION PART
     @extend_schema(
         summary="Send OTP code",
         description="Sends a one-time password code to a phone number for login, signup, or password reset.",
@@ -177,6 +236,7 @@ class SendOTPAPIView(APIView):
         },
         tags=["OTP"],
     )
+    # VIEW FUNCTIONALITY
     def post(self, request):
         serializer = SendOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -188,19 +248,19 @@ class SendOTPAPIView(APIView):
 
         if purpose == PhoneOTPModel.Purpose.LOGIN and not user:
             return Response(
-                {"detail": "User with this phone number does not exist."},
+                {"detail": "OTP code sent successfully."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if purpose == PhoneOTPModel.Purpose.SIGNUP and user:
             return Response(
-                {"detail": "User with this phone number already exists."},
+                {"detail": "OTP code sent successfully."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if purpose == PhoneOTPModel.Purpose.PASSWORD_RESET and not user:
             return Response(
-                {"detail": "User with this phone number does not exist."},
+                {"detail": "OTP code sent successfully."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -219,6 +279,7 @@ class SendOTPAPIView(APIView):
 class VerifyOTPAPIView(APIView):
     permission_classes = [permissions.AllowAny]
 
+    # API DOCUMENTATION PART
     @extend_schema(
         summary="Verify OTP code",
         description="Verifies an OTP code. For signup, creates the user if the phone number is not already registered.",
@@ -232,13 +293,18 @@ class VerifyOTPAPIView(APIView):
                         "Success",
                         value={
                             "detail": "OTP verified successfully.",
+                            "access": "token",
+                            "refresh": "token",
                             "user": {
-                                "id": "37998bda-1234-4abc-9def-123456789abc",
-                                "phone_number": "+989121234567",
+                                "id": "5954f233-76b2-4606-806c-3f6816378b88",
+                                "phone_number": "+989175991704",
                                 "first_name": "",
                                 "last_name": "",
-                                "is_active": True,
-                                "date_joined": "2026-07-07T12:00:00Z",
+                                "email": "",
+                                "is_active": "true",
+                                "is_staff": "true",
+                                "date_joined": "2026-07-07T18:48:10.045879Z",
+                                "last_login": "2026-07-08T10:52:00.632008Z"
                             },
                         },
                     )
@@ -297,8 +363,6 @@ class VerifyOTPAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        otp.mark_used()
-
         user = otp.user
 
         if purpose == PhoneOTPModel.Purpose.SIGNUP and not user:
@@ -308,7 +372,7 @@ class VerifyOTPAPIView(APIView):
 
         if purpose == PhoneOTPModel.Purpose.LOGIN and not user:
             return Response(
-                {"detail": "User does not exist."},
+                {"detail": "OTP sent successfully."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -318,10 +382,16 @@ class VerifyOTPAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        otp.mark_used()
+
+        tokens = get_tokens_for_user(user)
+
         return Response(
             {
                 "detail": "OTP verified successfully.",
-                "user": UserSerializer(user).data if user else None,
+                "access": tokens["access"],
+                "refresh": tokens["refresh"],
+                "user": UserSerializer(user).data,
             },
             status=status.HTTP_200_OK,
         )

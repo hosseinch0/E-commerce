@@ -1,11 +1,30 @@
+from .models import PhoneOTPModel
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
-
-from .models import PhoneOTPModel
+from datetime import timedelta
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 
 
 User = get_user_model()
+
+
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField()
+
+    def validate(self, attrs):
+        self.refresh = attrs["refresh"]
+        return attrs
+
+    def save(self, **kwargs):
+        try:
+            token = RefreshToken(self.refresh)
+            token.blacklist()
+        except TokenError:
+            raise serializers.ValidationError(
+                {"refresh": "Invalid or expired refresh token."}
+            )
 
 
 class UserSerializer(serializers.ModelSerializer):

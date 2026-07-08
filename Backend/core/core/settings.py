@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
-
+from datetime import timedelta
 from pathlib import Path
 from decouple import config, Csv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -40,6 +40,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'drf_spectacular',
     'drf_spectacular_sidecar',
+    'rest_framework_simplejwt.token_blacklist',
+    'rest_framework_simplejwt',
     'phonenumber_field',
     'user',
     'product',
@@ -141,6 +143,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     # Use Django's standard `django.contrib.auth` permissions,
     # or allow read-only access for unauthenticated users.
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly"
@@ -166,3 +171,12 @@ AUTH_USER_MODEL = "user.User"
 # Phone number Settings
 PHONENUMBER_DEFAULT_REGION = "IR"
 PHONENUMBER_DB_FORMAT = "E164"
+
+
+# JWT SETTINGS
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=5),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+}
