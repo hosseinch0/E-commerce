@@ -1,5 +1,5 @@
 from .models import PhoneOTPModel
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, password_validation
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from datetime import timedelta
@@ -143,6 +143,11 @@ class ChangePasswordSerializer(serializers.Serializer):
     def validate_old_password(self, value):
         user = self.context["request"].user
 
+        if not user.has_usable_password():
+            raise serializers.ValidationError(
+                "You have not set a password yet. Please use set-password first."
+            )
+
         if not user.check_password(value):
             raise serializers.ValidationError("Old password is incorrect.")
 
@@ -164,6 +169,41 @@ class ChangePasswordSerializer(serializers.Serializer):
         user.set_password(self.validated_data["new_password"])
         user.save(update_fields=["password"])
 
+        return user
+
+
+class SetPasswordSerializer(serializers.Serializer):
+    new_password = serializers.CharField(
+        write_only=True,
+        required=True,
+        validators=[validate_password],
+        style={"input_type": "password"},
+    )
+    new_password_confirm = serializers.CharField(
+        write_only=True,
+        required=True,
+        style={"input_type": "password"},
+    )
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+
+        if user.has_usable_password():
+            raise serializers.ValidationError(
+                "You already have a password. Please use change-password instead."
+            )
+
+        if attrs["new_password"] != attrs["new_password_confirm"]:
+            raise serializers.ValidationError(
+                {"new_password_confirm": "Passwords do not match."}
+            )
+
+        return attrs
+
+    def save(self, **kwargs):
+        user = self.context["request"].user
+        user.set_password(self.validated_data["new_password"])
+        user.save(update_fields=["password"])
         return user
 
 
@@ -306,3 +346,34 @@ DetailResponseSerializer = inline_serializer(
         "detail": serializers.CharField(),
     },
 )
+
+
+class SetPasswordSerializer(serializers.Serializer):
+    new_password = serializers.CharField(write_only=True)
+    new_password_confirm = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+
+        if user.has_usable_password():
+            raise serializers.ValidationError(
+                {"detail": "Password is already set. Use change password instead."}
+            )
+
+        if attrs["new_password"] != attrs["new_password_confirm"]:
+            raise serializers.ValidationError(
+                {"new_password_confirm": "Passwords do not match."}
+            )
+
+        password_validation.validate_password(
+            attrs["new_password"],
+            user=user,
+        )
+
+        return attrs
+
+    def save(self, **kwargs):
+        user = self.context["request"].user
+        user.set_password(self.validated_data["new_password"])
+        user.save(update_fields=["password"])
+        return user

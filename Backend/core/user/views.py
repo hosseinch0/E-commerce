@@ -1,18 +1,9 @@
-from django.contrib.auth import get_user_model
-from django.db import transaction
-from drf_spectacular.utils import (
-    OpenApiExample,
-    OpenApiResponse,
-    extend_schema,
-    extend_schema_view,
-)
 from rest_framework import permissions, status, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from user.services.auth import get_tokens_for_user
 from user.services.otp import issue_and_send_otp
 from rest_framework.generics import RetrieveUpdateAPIView
-
 from .models import PhoneOTPModel
 from .serializers import (
     ChangePasswordSerializer,
@@ -26,9 +17,32 @@ from .serializers import (
     UserSerializer,
     UserUpdateSerializer,
     VerifyOTPSerializer,
+    SetPasswordSerializer,
+    SetPasswordSerializer,
+)
+from rest_framework_simplejwt.views import TokenRefreshView
+from django.contrib.auth import get_user_model
+from django.db import transaction
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiResponse,
+    extend_schema,
+    extend_schema_view,
 )
 
+
 User = get_user_model()
+
+
+@extend_schema_view(
+    post=extend_schema(
+        tags=["Authentication"],
+        summary="Refresh access token",
+        description="Takes a refresh token and returns a new access token.",
+    )
+)
+class CustomTokenRefreshView(TokenRefreshView):
+    pass
 
 
 class LogoutAPIView(APIView):
@@ -420,7 +434,7 @@ class PasswordResetRequestAPIView(APIView):
                 description="User with this phone number does not exist."
             ),
         },
-        tags=["Password Reset"],
+        tags=["Profile"],
     )
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)
@@ -468,7 +482,7 @@ class PasswordResetConfirmAPIView(APIView):
                 description="Invalid, expired, or over-attempted OTP code."
             ),
         },
-        tags=["Password Reset"],
+        tags=["Profile"],
     )
     @transaction.atomic
     def post(self, request):
@@ -582,5 +596,33 @@ class ChangePasswordAPIView(APIView):
 
         return Response(
             {"detail": "Password changed successfully."},
+            status=status.HTTP_200_OK,
+        )
+
+
+class SetPasswordAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(
+        summary="Set my password",
+        description="Sets an initial password for an authenticated user who registered with OTP.",
+        request=SetPasswordSerializer,
+        responses={
+            200: DetailResponseSerializer,
+            400: OpenApiResponse(description="Invalid password data."),
+            401: OpenApiResponse(description="Authentication credentials were not provided."),
+        },
+        tags=["Profile"],
+    )
+    def post(self, request):
+        serializer = SetPasswordSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response(
+            {"detail": "Password set successfully."},
             status=status.HTTP_200_OK,
         )

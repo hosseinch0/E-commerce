@@ -16,19 +16,14 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from product.views import ProductViewSet, ProductVariantViewSet
 from rest_framework_simplejwt.views import TokenRefreshView
 from .routers.public_api_router import router
 from .routers.private_api_router import admin_router
 from user.views import (
     SendOTPAPIView,
     VerifyOTPAPIView,
-    PasswordResetRequestAPIView,
-    PasswordResetConfirmAPIView,
     LogoutAPIView,
-    ChangePasswordAPIView,
-    ProfileAPIView,
+    CustomTokenRefreshView,
 )
 from drf_spectacular.views import (
     SpectacularAPIView,
@@ -48,27 +43,17 @@ urlpatterns = [
 
 
     # Users public urls
-    path("api/profile/", include('user.urls')),
+    path("api/user/", include('user.urls')),
 
 
     # Auth URLs
     path("api/auth/token/refresh/",
-         TokenRefreshView.as_view(), name="token-refresh"),
+         CustomTokenRefreshView.as_view(), name="token-refresh"),
     path("api/auth/send-otp/", SendOTPAPIView.as_view(), name="send-otp"),
     path("api/auth/verify-otp/", VerifyOTPAPIView.as_view(), name="verify-otp"),
     path("api/auth/logout/", LogoutAPIView.as_view(), name="logout"),
 
-    # Password Reset URLs
-    path(
-        "api/auth/password-reset/request/",
-        PasswordResetRequestAPIView.as_view(),
-        name="password-reset-request",
-    ),
-    path(
-        "api/auth/password-reset/confirm/",
-        PasswordResetConfirmAPIView.as_view(),
-        name="password-reset-confirm",
-    ),
+
 
     # DRF Browsable API login/logout
     path("api-auth/", include("rest_framework.urls")),

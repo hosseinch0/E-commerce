@@ -10,5 +10,5 @@ router = DefaultRouter()
 router.register("products", ProductViewSet, basename="product")
 router.register("product-variants", ProductVariantViewSet,
                 basename="product-variant")
-router.register("notifications", NotificationViewSet,
+router.register("user/notifications", NotificationViewSet,
                 basename="notification")

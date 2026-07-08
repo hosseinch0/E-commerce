@@ -18,6 +18,9 @@ class CustomUserManager(UserManager):
         if not phone_number:
             raise ValueError("Superuser must have a phone number")
 
+        if password is None:
+            raise ValueError("Superuser must have a password")
+
         user = self.model(phone_number=phone_number, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
@@ -30,7 +33,12 @@ class CustomUserManager(UserManager):
         extra_fields.setdefault("is_active", True)
 
         user = self.model(phone_number=phone_number, **extra_fields)
-        user.set_password(password)
+
+        if password is None:
+            user.set_unusable_password()
+        else:
+            user.set_password(password)
+
         user.save(using=self._db)
         return user
 
