@@ -6,7 +6,9 @@ from datetime import timedelta
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 
-
+from drf_spectacular.utils import (
+    inline_serializer,
+)
 User = get_user_model()
 
 
@@ -296,3 +298,11 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
             )
 
         return attrs
+
+
+DetailResponseSerializer = inline_serializer(
+    name="DetailResponse",
+    fields={
+        "detail": serializers.CharField(),
+    },
+)

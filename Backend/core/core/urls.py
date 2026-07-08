@@ -19,6 +19,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from product.views import ProductViewSet, ProductVariantViewSet
 from rest_framework_simplejwt.views import TokenRefreshView
+from .api_router import router
 from user.views import (
     UserViewSet,
     PhoneOTPViewSet,
@@ -35,44 +36,18 @@ from drf_spectacular.views import (
 )
 
 
-router = DefaultRouter()
-
-# USERS
-router.register(r"users", UserViewSet, basename="user")
-router.register(r"otps", PhoneOTPViewSet, basename="otp")
-
-# Products
-router.register(r"products", ProductViewSet, basename="product")
-router.register(r"product-variants", ProductVariantViewSet,
-                basename="product-variant")
-
-
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path("auth/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
-    # Router URLs
+    path("admin/", admin.site.urls),
+
+    # Main API router root
     path("api/", include(router.urls)),
 
-
-    # OTP Auth URLs
+    # Auth URLs
+    path("api/auth/token/refresh/",
+         TokenRefreshView.as_view(), name="token-refresh"),
     path("api/auth/send-otp/", SendOTPAPIView.as_view(), name="send-otp"),
     path("api/auth/verify-otp/", VerifyOTPAPIView.as_view(), name="verify-otp"),
-    path("auth/logout/", LogoutAPIView.as_view(), name="logout"),
-
-    # DRF browsable API login/logout
-    path("api-auth/", include("rest_framework.urls")),
-    path('i18n/', include('django.conf.urls.i18n')),
-
-
-    # API DOCUMENTATION URLS
-    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"),
-         name="swagger-ui"),
-    path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
-
-
-
-
+    path("api/auth/logout/", LogoutAPIView.as_view(), name="logout"),
 
     # Password Reset URLs
     path(
@@ -84,5 +59,24 @@ urlpatterns = [
         "api/auth/password-reset/confirm/",
         PasswordResetConfirmAPIView.as_view(),
         name="password-reset-confirm",
+    ),
+
+    # DRF Browsable API login/logout
+    path("api-auth/", include("rest_framework.urls")),
+
+    # i18n
+    path("i18n/", include("django.conf.urls.i18n")),
+
+    # API Documentation URLs
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path(
+        "api/docs/",
+        SpectacularSwaggerView.as_view(url_name="schema"),
+        name="swagger-ui",
+    ),
+    path(
+        "api/redoc/",
+        SpectacularRedocView.as_view(url_name="schema"),
+        name="redoc",
     ),
 ]

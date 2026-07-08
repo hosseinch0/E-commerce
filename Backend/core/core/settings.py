@@ -42,9 +42,12 @@ INSTALLED_APPS = [
     'drf_spectacular_sidecar',
     'rest_framework_simplejwt.token_blacklist',
     'rest_framework_simplejwt',
+    'django_extensions',
     'phonenumber_field',
     'user',
     'product',
+    'notification',
+
 ]
 
 MIDDLEWARE = [
@@ -145,10 +148,12 @@ REST_FRAMEWORK = {
     # or allow read-only access for unauthenticated users.
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
     ),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly"
+        "rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly",
+        "rest_framework.permissions.IsAuthenticated",
     ]
 }
 

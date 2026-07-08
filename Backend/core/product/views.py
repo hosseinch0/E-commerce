@@ -1,4 +1,4 @@
-from rest_framework import viewsets
+from rest_framework import viewsets, permissions
 from drf_spectacular.utils import extend_schema, extend_schema_view
 
 from .models import ProductModel, ProductVariantModel
@@ -62,10 +62,14 @@ class ProductViewSet(viewsets.ModelViewSet):
         )
     )
 
+    def get_permissions(self):
+        if self.action in ["list", "retrieve"]:
+            return [permissions.AllowAny()]
+        return [permissions.IsAdminUser()]
+
     def get_serializer_class(self):
         if self.action == "list":
             return ProductListSerializer
-
         return ProductDetailSerializer
 
 
@@ -116,8 +120,12 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
         .prefetch_related("variant_attribute_values__attribute_value__attribute")
     )
 
+    def get_permissions(self):
+        if self.action in ["list", "retrieve"]:
+            return [permissions.AllowAny()]
+        return [permissions.IsAdminUser()]
+
     def get_serializer_class(self):
         if self.action in ["create", "update", "partial_update"]:
             return ProductVariantCreateUpdateSerializer
-
         return ProductVariantSerializer

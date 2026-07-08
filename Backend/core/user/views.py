@@ -25,76 +25,10 @@ from .serializers import (
     UserUpdateSerializer,
     VerifyOTPSerializer,
 )
-from .serializers import LogoutSerializer
-
+from .serializers import LogoutSerializer, DetailResponseSerializer
 User = get_user_model()
 
 
-@extend_schema_view(
-    list=extend_schema(
-        summary="List users",
-        description="Returns all users ordered by newest registration first.",
-        responses=UserSerializer,
-        tags=["Users"],
-    ),
-    retrieve=extend_schema(
-        summary="Retrieve user",
-        description="Returns a single user by ID.",
-        responses=UserSerializer,
-        tags=["Users"],
-    ),
-    create=extend_schema(
-        summary="Create user",
-        description="Creates a new user account using a phone number.",
-        request=UserCreateSerializer,
-        responses={201: UserSerializer},
-        tags=["Users"],
-    ),
-    update=extend_schema(
-        summary="Update user",
-        description="Updates all editable user fields.",
-        request=UserUpdateSerializer,
-        responses=UserSerializer,
-        tags=["Users"],
-    ),
-    partial_update=extend_schema(
-        summary="Partially update user",
-        description="Partially updates editable user fields.",
-        request=UserUpdateSerializer,
-        responses=UserSerializer,
-        tags=["Users"],
-    ),
-    destroy=extend_schema(
-        summary="Delete user",
-        description="Deletes a user account.",
-        responses={204: None},
-        tags=["Users"],
-    ),
-    me=extend_schema(
-        summary="Get or update current user",
-        description="GET returns the authenticated user's profile. PATCH updates the authenticated user's profile.",
-        request=UserUpdateSerializer,
-        responses=UserSerializer,
-        tags=["Users"],
-    ),
-    change_password=extend_schema(
-        summary="Change password",
-        description="Changes the authenticated user's password.",
-        request=ChangePasswordSerializer,
-        responses={
-            200: OpenApiResponse(
-                description="Password changed successfully.",
-                examples=[
-                    OpenApiExample(
-                        "Success",
-                        value={"detail": "Password changed successfully."},
-                    )
-                ],
-            )
-        },
-        tags=["Users"],
-    ),
-)
 class LogoutAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -152,6 +86,47 @@ class LogoutAPIView(APIView):
         return Response({"detail": "Logged out successfully."}, status=status.HTTP_200_OK)
 
 
+@extend_schema_view(
+    list=extend_schema(
+        summary="List users",
+        description="Returns all users ordered by newest registration first.",
+        responses=UserSerializer,
+        tags=["Users"],
+    ),
+    retrieve=extend_schema(
+        summary="Retrieve user",
+        description="Returns a single user by ID.",
+        responses=UserSerializer,
+        tags=["Users"],
+    ),
+    create=extend_schema(
+        summary="Create user",
+        description="Creates a new user account using a phone number.",
+        request=UserCreateSerializer,
+        responses={201: UserSerializer},
+        tags=["Users"],
+    ),
+    update=extend_schema(
+        summary="Update user",
+        description="Updates all editable user fields.",
+        request=UserUpdateSerializer,
+        responses=UserSerializer,
+        tags=["Users"],
+    ),
+    partial_update=extend_schema(
+        summary="Partially update user",
+        description="Partially updates editable user fields.",
+        request=UserUpdateSerializer,
+        responses=UserSerializer,
+        tags=["Users"],
+    ),
+    destroy=extend_schema(
+        summary="Delete user",
+        description="Deletes a user account.",
+        responses={204: None},
+        tags=["Users"],
+    ),
+)
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by("-date_joined")
 
@@ -173,6 +148,38 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return UserSerializer
 
+    @extend_schema(
+        methods=["GET"],
+        summary="Get my profile",
+        description="Returns the authenticated user's profile.",
+        responses={
+            200: UserSerializer,
+            401: OpenApiResponse(description="Authentication credentials were not provided."),
+        },
+        tags=["Users"],
+    )
+    @extend_schema(
+        methods=["PATCH"],
+        summary="Update my profile",
+        description="Partially updates the authenticated user's profile.",
+        request=UserUpdateSerializer,
+        responses={
+            200: UserSerializer,
+            400: OpenApiResponse(description="Invalid user data."),
+            401: OpenApiResponse(description="Authentication credentials were not provided."),
+        },
+        tags=["Users"],
+        examples=[
+            OpenApiExample(
+                name="Patch request example",
+                value={
+                    "first_name": "Ali",
+                    "last_name": "Ahmadi",
+                },
+                request_only=True,
+            ),
+        ],
+    )
     @action(
         detail=False,
         methods=["get", "patch"],
@@ -195,6 +202,35 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return Response(UserSerializer(user).data)
 
+    @extend_schema(
+        summary="Change my password",
+        description="Changes the authenticated user's password.",
+        request=ChangePasswordSerializer,
+        responses={
+            200: DetailResponseSerializer,
+            400: OpenApiResponse(description="Invalid password data."),
+            401: OpenApiResponse(description="Authentication credentials were not provided."),
+        },
+        tags=["Users"],
+        examples=[
+            OpenApiExample(
+                name="Request example",
+                value={
+                    "old_password": "OldPassword123!",
+                    "new_password": "NewPassword123!",
+                    "new_password_confirm": "NewPassword123!",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                name="Success response",
+                value={
+                    "detail": "Password changed successfully."
+                },
+                response_only=True,
+            ),
+        ],
+    )
     @action(
         detail=False,
         methods=["post"],
