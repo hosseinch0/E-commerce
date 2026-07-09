@@ -47,6 +47,9 @@ INSTALLED_APPS = [
     'user',
     'product',
     'notification',
+    'cart',
+    'order',
+    'payment',
 
 ]
 
@@ -185,3 +188,6 @@ SIMPLE_JWT = {
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
 }
+
+
+PAYMENT_SANDBOX_CALLBACK_URL = config("PAYMENT_SANDBOX_CALLBACK_URL")

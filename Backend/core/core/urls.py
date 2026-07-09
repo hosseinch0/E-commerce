@@ -42,8 +42,17 @@ urlpatterns = [
     path("api/admin/", include(admin_router.urls)),
 
 
-    # Users public urls
-    path("api/user/", include('user.urls')),
+    # Users public URLs
+    path("api/user/", include("user.urls")),
+
+    # Cart URLs
+    path("api/cart/", include("cart.urls")),
+
+    # Order Urls
+    path('api/order/', include("order.urls")),
+
+    # Payment URLs
+    path('api/payment/', include("payment.urls")),
 
 
     # Auth URLs
