@@ -157,7 +157,17 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly",
         "rest_framework.permissions.IsAuthenticated",
-    ]
+    ],
+
+    "DEFAULT_THROTTLE_RATES": {
+        "otp_send_ip": "10/hour",
+        "otp_send_phone": "3/hour",
+        "otp_verify_ip": "30/hour",
+        "otp_verify_phone": "10/hour",
+        "password_reset_confirm_ip": "10/hour",
+        "logout": "20/hour",
+    },
+
 }
 
 # SPECTACULAR configuration
@@ -191,3 +201,20 @@ SIMPLE_JWT = {
 
 
 PAYMENT_SANDBOX_CALLBACK_URL = config("PAYMENT_SANDBOX_CALLBACK_URL")
+
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    },
+
+
+    # For Production
+    # "default": {
+    #     "BACKEND": "django_redis.cache.RedisCache",
+    #     "LOCATION": "redis://127.0.0.1:6379/1",
+    #     "OPTIONS": {
+    #         "CLIENT_CLASS": "django_redis.client.DefaultClient",
+    #     },
+    # }
+}

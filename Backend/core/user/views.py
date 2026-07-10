@@ -30,6 +30,12 @@ from drf_spectacular.utils import (
     extend_schema_view,
 )
 
+from user.throttles import (
+    OTPSendIPThrottle,
+    OTPSendPhoneThrottle,
+    OTPVerifyIPThrottle,
+    OTPVerifyPhoneThrottle,
+)
 
 User = get_user_model()
 
@@ -236,6 +242,11 @@ class AdminUserViewSet(viewsets.ModelViewSet):
 
 class SendOTPAPIView(APIView):
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [OTPSendIPThrottle, OTPSendPhoneThrottle]
+    GENERIC_OTP_SENT_MESSAGE = (
+        "If this phone number can receive an OTP for the requested action, "
+        "a code has been sent."
+    )
 
     @extend_schema(
         summary="Send OTP code",
@@ -264,38 +275,31 @@ class SendOTPAPIView(APIView):
 
         user = User.objects.filter(phone_number=phone_number).first()
 
+        should_send = True
+
         if purpose == PhoneOTPModel.Purpose.LOGIN and not user:
-            return Response(
-                {"detail": "OTP code sent successfully."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            should_send = False
+        elif purpose == PhoneOTPModel.Purpose.SIGNUP and user:
+            should_send = False
+        elif purpose == PhoneOTPModel.Purpose.PASSWORD_RESET and not user:
+            should_send = False
 
-        if purpose == PhoneOTPModel.Purpose.SIGNUP and user:
-            return Response(
-                {"detail": "OTP code sent successfully."},
-                status=status.HTTP_400_BAD_REQUEST,
+        if should_send:
+            issue_and_send_otp(
+                phone_number=phone_number,
+                purpose=purpose,
+                user=user,
             )
-
-        if purpose == PhoneOTPModel.Purpose.PASSWORD_RESET and not user:
-            return Response(
-                {"detail": "OTP code sent successfully."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        issue_and_send_otp(
-            phone_number=phone_number,
-            purpose=purpose,
-            user=user,
-        )
 
         return Response(
-            {"detail": "OTP code sent successfully."},
-            status=status.HTTP_201_CREATED,
+            {"detail": self.GENERIC_OTP_SENT_MESSAGE},
+            status=status.HTTP_200_OK,
         )
 
 
 class VerifyOTPAPIView(APIView):
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [OTPVerifyIPThrottle, OTPVerifyPhoneThrottle]
 
     @extend_schema(
         summary="Verify OTP code",
@@ -443,26 +447,27 @@ class PasswordResetRequestAPIView(APIView):
         phone_number = serializer.validated_data["phone_number"]
         user = User.objects.filter(phone_number=phone_number).first()
 
-        if not user:
-            return Response(
-                {"detail": "User with this phone number does not exist."},
-                status=status.HTTP_400_BAD_REQUEST,
+        if user:
+            issue_and_send_otp(
+                phone_number=phone_number,
+                purpose=PhoneOTPModel.Purpose.PASSWORD_RESET,
+                user=user,
             )
 
-        issue_and_send_otp(
-            phone_number=phone_number,
-            purpose=PhoneOTPModel.Purpose.PASSWORD_RESET,
-            user=user,
-        )
-
         return Response(
-            {"detail": "Password reset OTP sent successfully."},
-            status=status.HTTP_201_CREATED,
+            {
+                "detail": (
+                    "If an account with this phone number exists, "
+                    "an OTP code has been sent."
+                )
+            },
+            status=status.HTTP_200_OK,
         )
 
 
 class PasswordResetConfirmAPIView(APIView):
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [OTPVerifyIPThrottle, OTPVerifyPhoneThrottle]
 
     @extend_schema(
         summary="Confirm password reset",

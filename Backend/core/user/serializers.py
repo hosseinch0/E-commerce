@@ -5,6 +5,7 @@ from rest_framework import serializers
 from datetime import timedelta
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
+from phonenumber_field.serializerfields import PhoneNumberField
 
 from drf_spectacular.utils import (
     inline_serializer,
@@ -241,7 +242,7 @@ class PhoneOTPSerializer(serializers.ModelSerializer):
 
 
 class SendOTPSerializer(serializers.Serializer):
-    phone_number = serializers.CharField(required=True)
+    phone_number = PhoneNumberField(required=True, region='IR')
     purpose = serializers.ChoiceField(
         choices=PhoneOTPModel.Purpose.choices,
         default=PhoneOTPModel.Purpose.LOGIN,
@@ -257,7 +258,7 @@ class SendOTPSerializer(serializers.Serializer):
 
 
 class VerifyOTPSerializer(serializers.Serializer):
-    phone_number = serializers.CharField(required=True)
+    phone_number = PhoneNumberField(required=True, region='IR')
     code = serializers.CharField(
         required=True,
         min_length=4,
@@ -278,17 +279,15 @@ class VerifyOTPSerializer(serializers.Serializer):
         return value
 
     def validate_code(self, value):
-        value = str(value).strip()
-
-        if not value.isdigit():
+        if not value.isascii() or not value.isdigit():
             raise serializers.ValidationError(
-                "OTP code must contain only digits.")
-
+                "OTP code must contain only ASCII digits."
+            )
         return value
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):
-    phone_number = serializers.CharField(required=True)
+    phone_number = PhoneNumberField(required=True, region="IR")
 
     def validate_phone_number(self, value):
         value = str(value).strip()
@@ -300,7 +299,7 @@ class PasswordResetRequestSerializer(serializers.Serializer):
 
 
 class PasswordResetConfirmSerializer(serializers.Serializer):
-    phone_number = serializers.CharField(required=True)
+    phone_number = PhoneNumberField(required=True, region="IR")
     code = serializers.CharField(
         required=True,
         min_length=4,
@@ -320,21 +319,20 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
     )
 
     def validate_code(self, value):
-        value = str(value).strip()
-
-        if not value.isdigit():
+        if not value.isascii() or not value.isdigit():
             raise serializers.ValidationError(
-                "OTP code must contain only digits.")
-
+                "OTP code must contain only ASCII digits."
+            )
         return value
 
     def validate(self, attrs):
-        new_password = attrs.get("new_password")
-        new_password_confirm = attrs.get("new_password_confirm")
-
-        if new_password != new_password_confirm:
+        if attrs["new_password"] != attrs["new_password_confirm"]:
             raise serializers.ValidationError(
-                {"new_password_confirm": "Passwords do not match."}
+                {
+                    "new_password_confirm": (
+                        "Password confirmation does not match."
+                    )
+                }
             )
 
         return attrs
