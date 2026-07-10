@@ -16,7 +16,6 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from rest_framework_simplejwt.views import TokenRefreshView
 from .routers.public_api_router import router
 from .routers.private_api_router import admin_router
 from user.views import (
@@ -61,7 +60,6 @@ urlpatterns = [
     path("api/auth/send-otp/", SendOTPAPIView.as_view(), name="send-otp"),
     path("api/auth/verify-otp/", VerifyOTPAPIView.as_view(), name="verify-otp"),
     path("api/auth/logout/", LogoutAPIView.as_view(), name="logout"),
-
 
 
     # DRF Browsable API login/logout

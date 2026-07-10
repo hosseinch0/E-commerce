@@ -5,6 +5,12 @@ from user.services.auth import get_tokens_for_user
 from user.services.otp import issue_and_send_otp
 from rest_framework.generics import RetrieveUpdateAPIView
 from .models import PhoneOTPModel
+from user.services.otp import consume_otp, OTPVerificationError
+from rest_framework_simplejwt.views import TokenRefreshView
+from django.contrib.auth import get_user_model
+from django.db import transaction
+from drf_spectacular.utils import (
+    OpenApiExample, OpenApiResponse, extend_schema, extend_schema_view,)
 from .serializers import (
     ChangePasswordSerializer,
     DetailResponseSerializer,
@@ -15,19 +21,11 @@ from .serializers import (
     SendOTPSerializer,
     UserCreateSerializer,
     UserSerializer,
+    AuthUserSerializer,
     UserUpdateSerializer,
     VerifyOTPSerializer,
     SetPasswordSerializer,
     SetPasswordSerializer,
-)
-from rest_framework_simplejwt.views import TokenRefreshView
-from django.contrib.auth import get_user_model
-from django.db import transaction
-from drf_spectacular.utils import (
-    OpenApiExample,
-    OpenApiResponse,
-    extend_schema,
-    extend_schema_view,
 )
 
 from user.throttles import (
@@ -36,7 +34,6 @@ from user.throttles import (
     OTPVerifyIPThrottle,
     OTPVerifyPhoneThrottle,
 )
-
 User = get_user_model()
 
 
@@ -317,14 +314,7 @@ class VerifyOTPAPIView(APIView):
                             "refresh": "token",
                             "user": {
                                 "id": "5954f233-76b2-4606-806c-3f6816378b88",
-                                "phone_number": "+989175991704",
-                                "first_name": "",
-                                "last_name": "",
-                                "email": "",
-                                "is_active": True,
-                                "is_staff": True,
-                                "date_joined": "2026-07-07T18:48:10.045879Z",
-                                "last_login": "2026-07-08T10:52:00.632008Z",
+                                "phone_number": "+989195591714",
                             },
                         },
                     )
@@ -345,64 +335,26 @@ class VerifyOTPAPIView(APIView):
         code = serializer.validated_data["code"]
         purpose = serializer.validated_data["purpose"]
 
-        otp = (
-            PhoneOTPModel.objects.select_for_update()
-            .filter(
+        if purpose not in (
+            PhoneOTPModel.Purpose.LOGIN,
+            PhoneOTPModel.Purpose.SIGNUP,
+        ):
+            return Response(
+                {"detail": "OTP verification failed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = consume_otp(
                 phone_number=phone_number,
                 purpose=purpose,
-                is_used=False,
+                code=code,
             )
-            .order_by("-created_at")
-            .first()
-        )
-
-        if not otp:
+        except OTPVerificationError:
             return Response(
-                {"detail": "OTP code not found."},
+                {"detail": "OTP verification failed."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        if otp.is_expired:
-            return Response(
-                {"detail": "OTP code has expired."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if otp.attempts >= 5:
-            return Response(
-                {"detail": "Too many attempts. Please request a new OTP."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if not otp.check_code(code):
-            otp.attempts += 1
-            otp.save(update_fields=["attempts"])
-
-            return Response(
-                {"detail": "Invalid OTP code."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        user = otp.user
-
-        if purpose == PhoneOTPModel.Purpose.SIGNUP and not user:
-            user = User.objects.create_user(phone_number=phone_number)
-            otp.user = user
-            otp.save(update_fields=["user"])
-
-        if purpose == PhoneOTPModel.Purpose.LOGIN and not user:
-            return Response(
-                {"detail": "OTP sent successfully."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if purpose == PhoneOTPModel.Purpose.PASSWORD_RESET:
-            return Response(
-                {"detail": "Use the password reset confirm endpoint for password reset OTP."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        otp.mark_used()
 
         tokens = get_tokens_for_user(user)
 
@@ -411,7 +363,7 @@ class VerifyOTPAPIView(APIView):
                 "detail": "OTP verified successfully.",
                 "access": tokens["access"],
                 "refresh": tokens["refresh"],
-                "user": UserSerializer(user).data,
+                "user": AuthUserSerializer(user).data,
             },
             status=status.HTTP_200_OK,
         )
@@ -494,61 +446,21 @@ class PasswordResetConfirmAPIView(APIView):
         serializer = PasswordResetConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        phone_number = serializer.validated_data["phone_number"]
-        code = serializer.validated_data["code"]
-        new_password = serializer.validated_data["new_password"]
-
-        otp = (
-            PhoneOTPModel.objects.select_for_update()
-            .filter(
-                phone_number=phone_number,
+        try:
+            user = consume_otp(
+                phone_number=serializer.validated_data["phone_number"],
                 purpose=PhoneOTPModel.Purpose.PASSWORD_RESET,
-                is_used=False,
+                code=serializer.validated_data["code"],
             )
-            .order_by("-created_at")
-            .first()
-        )
 
-        if not otp:
+            user.set_password(serializer.validated_data["new_password"])
+            user.save(update_fields=["password"])
+
+        except OTPVerificationError:
             return Response(
-                {"detail": "OTP code not found."},
+                {"detail": "Password reset could not be completed."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        if otp.is_expired:
-            return Response(
-                {"detail": "OTP code has expired."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if otp.attempts >= 5:
-            return Response(
-                {"detail": "Too many attempts. Please request a new OTP."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if not otp.check_code(code):
-            otp.attempts += 1
-            otp.save(update_fields=["attempts"])
-
-            return Response(
-                {"detail": "Invalid OTP code."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        user = otp.user or User.objects.filter(
-            phone_number=phone_number).first()
-
-        if not user:
-            return Response(
-                {"detail": "User not found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        user.set_password(new_password)
-        user.save(update_fields=["password"])
-
-        otp.mark_used()
 
         return Response(
             {"detail": "Password reset successfully."},
